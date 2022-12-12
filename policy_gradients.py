@@ -2,14 +2,14 @@ import gym
 import numpy as np
 import tensorflow.compat.v1 as tf
 import collections
+import time
 
 # optimized for Tf2
 tf.disable_v2_behavior()
 print("tf_ver:{}".format(tf.__version__))
 
-env = gym.make('CartPole-v1')
-np.random.seed(1)
-
+SEED = 42
+algorithm_name = "policy_gradients"
 
 class PolicyNetwork:
     def __init__(self, state_size, action_size, learning_rate, name='policy_network'):
@@ -42,6 +42,12 @@ class PolicyNetwork:
 
 
 def run():
+    env = gym.make('CartPole-v1')
+    np.random.seed(SEED)
+    env.seed(SEED)
+    tf.set_random_seed(SEED)
+    rewards, mean_rewards, losses = [], [], []
+    
     # Define hyperparameters
     state_size = 4
     action_size = env.action_space.n
@@ -64,7 +70,7 @@ def run():
         Transition = collections.namedtuple("Transition", ["state", "action", "reward", "next_state", "done"])
         episode_rewards = np.zeros(max_episodes)
         average_rewards = 0.0
-
+        since = time.time()
         for episode in range(max_episodes):
             state = env.reset()
             state = state.reshape([1, state_size])
@@ -91,6 +97,8 @@ def run():
                     print("Episode {} Reward: {} Average over 100 episodes: {}".format(episode, episode_rewards[episode], round(average_rewards, 2)))
                     if average_rewards > 475:
                         print(' Solved at episode: ' + str(episode))
+                        time_elapsed = time.time() - since
+                        print("Algorithm {} converged after {} seconds".format(algorithm_name, time_elapsed))
                         solved = True
                     break
                 state = next_state
@@ -103,7 +111,16 @@ def run():
                 total_discounted_return = sum(discount_factor ** i * t.reward for i, t in enumerate(episode_transitions[t:])) # Rt
                 feed_dict = {policy.state: transition.state, policy.R_t: total_discounted_return, policy.action: transition.action}
                 _, loss = sess.run([policy.optimizer, policy.loss], feed_dict)
-
+            rewards.append(episode_rewards[episode])
+            mean_rewards.append(average_rewards)
+            losses.append(loss)
+    return episode, rewards, mean_rewards, losses
 
 if __name__ == '__main__':
-    run()
+    algorithm_name = "policy_gradients"
+    last_episode, rewards, mean_rewards, losses = run()
+    with open('optimal_{}.npy'.format(algorithm_name), 'wb') as f:
+        np.save(f, last_episode)
+        np.save(f, rewards)
+        np.save(f, mean_rewards)
+        np.save(f, losses)
